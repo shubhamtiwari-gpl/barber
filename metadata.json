@@ -1,0 +1,6 @@
+{
+  "name": "Crown & Blade | Luxury Barbershop & Grooming Lounge",
+  "description": "Premium gentleman's barbershop featuring bespoke hair & beard grooming services, master artisan profiles, online appointment booking, and a dedicated admin management dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
