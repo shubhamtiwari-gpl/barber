@@ -23,6 +23,8 @@ interface BookingPageProps {
   barbers: BarberProfile[];
   initialServiceId?: string;
   initialBarberId?: string;
+  currentUser?: import('../types').UserProfile | null;
+  onOpenAuthModal?: () => void;
   onAppointmentBooked?: (appointment: Appointment) => void;
   showToast: (type: 'success' | 'error' | 'info', title: string, message?: string) => void;
 }
@@ -32,6 +34,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   barbers,
   initialServiceId,
   initialBarberId,
+  currentUser,
+  onOpenAuthModal,
   onAppointmentBooked,
   showToast,
 }) => {
@@ -84,6 +88,14 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   useEffect(() => {
     if (initialBarberId) setSelectedBarberId(initialBarberId);
   }, [initialBarberId]);
+
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.name && !customerName) setCustomerName(currentUser.name);
+      if (currentUser.phone && !phone) setPhone(currentUser.phone);
+      if (currentUser.email && !email) setEmail(currentUser.email);
+    }
+  }, [currentUser]);
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
   const selectedBarber = barbers.find((b) => b.id === selectedBarberId) || barbers[0];
@@ -462,13 +474,32 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
                   {/* Step 4: Client Info */}
                   <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-6 h-6 rounded-full bg-[#d4af37] text-[#0c0c0e] font-bold text-xs flex items-center justify-center font-mono">
-                        4
-                      </span>
-                      <label className="font-cinzel text-base font-bold text-white tracking-wide">
-                        GUEST DETAILS
-                      </label>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-[#d4af37] text-[#0c0c0e] font-bold text-xs flex items-center justify-center font-mono">
+                          4
+                        </span>
+                        <label className="font-cinzel text-base font-bold text-white tracking-wide">
+                          GUEST DETAILS
+                        </label>
+                      </div>
+
+                      {currentUser ? (
+                        <div className="flex items-center gap-1.5 text-xs text-[#d4af37] bg-[#d4af37]/10 px-2.5 py-1 rounded-lg border border-[#d4af37]/30">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Logged in as {currentUser.name || currentUser.phone}</span>
+                        </div>
+                      ) : (
+                        onOpenAuthModal && (
+                          <button
+                            type="button"
+                            onClick={onOpenAuthModal}
+                            className="text-xs text-[#d4af37] hover:underline cursor-pointer flex items-center gap-1"
+                          >
+                            <span>मोबाइल से लॉगिन करें</span>
+                          </button>
+                        )
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

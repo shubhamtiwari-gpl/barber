@@ -78,6 +78,20 @@ function initTables(db: Database) {
     );
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      phone TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      name TEXT,
+      email TEXT,
+      preferred_service TEXT,
+      preferred_barber TEXT,
+      created_at TEXT NOT NULL,
+      last_login_at TEXT
+    );
+  `);
+
   // Check if we should seed sample initial data for rich demonstration
   const countResult = db.exec("SELECT COUNT(*) as count FROM appointments");
   const appointmentCount = countResult.length > 0 && countResult[0].values.length > 0 ? Number(countResult[0].values[0][0]) : 0;

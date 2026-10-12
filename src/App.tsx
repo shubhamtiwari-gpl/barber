@@ -7,7 +7,9 @@ import { ServicesPage } from './pages/ServicesPage';
 import { BarbersPage } from './pages/BarbersPage';
 import { BookingPage } from './pages/BookingPage';
 import { AdminPage } from './pages/AdminPage';
-import { ServiceItem, BarberProfile, CustomerReview, Appointment } from './types';
+import { UserAuthModal } from './components/UserAuthModal';
+import { UserProfileModal } from './components/UserProfileModal';
+import { ServiceItem, BarberProfile, CustomerReview, UserProfile } from './types';
 import { SERVICES as DEFAULT_SERVICES, BARBERS as DEFAULT_BARBERS, REVIEWS as DEFAULT_REVIEWS } from './data/defaultData';
 
 export default function App() {
@@ -28,6 +30,22 @@ export default function App() {
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     return Boolean(localStorage.getItem('cb_admin_token'));
   });
+
+  // Customer / User Authentication State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    const saved = localStorage.getItem('cb_user_profile');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -94,6 +112,45 @@ export default function App() {
     fetchData();
   }, []);
 
+  // Verify and sync user token on launch
+  useEffect(() => {
+    const token = localStorage.getItem('cb_user_token');
+    if (token) {
+      fetch('/api/user/profile', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => {
+          if (res.ok) return res.json();
+          throw new Error('Token expired');
+        })
+        .then((data) => {
+          if (data.user) {
+            setCurrentUser(data.user);
+            localStorage.setItem('cb_user_profile', JSON.stringify(data.user));
+          }
+        })
+        .catch(() => {
+          // Token invalid or expired
+          localStorage.removeItem('cb_user_token');
+          localStorage.removeItem('cb_user_profile');
+          setCurrentUser(null);
+        });
+    }
+  }, []);
+
+  const handleUserLoginSuccess = (user: UserProfile, _token: string) => {
+    setCurrentUser(user);
+    setIsProfileModalOpen(true);
+  };
+
+  const handleUserLogout = () => {
+    localStorage.removeItem('cb_user_token');
+    localStorage.removeItem('cb_user_profile');
+    setCurrentUser(null);
+    setIsProfileModalOpen(false);
+    showToast('info', 'लॉगआउट सफल / Logged Out', 'आपका सत्र समाप्त हो गया है।');
+  };
+
   const handleSelectServiceForBooking = (serviceId: string) => {
     setSelectedServiceForBooking(serviceId);
   };
@@ -107,11 +164,33 @@ export default function App() {
       {/* Toast Notification Layer */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
+      {/* Customer Auth Modal (Login / Auto-Register) */}
+      <UserAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLoginSuccess={handleUserLoginSuccess}
+        showToast={showToast}
+      />
+
+      {/* Customer Profile & Bookings Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={currentUser}
+        onLogout={handleUserLogout}
+        onNavigateToBooking={() => handleNavigate('booking')}
+        showToast={showToast}
+        onUpdateUser={(updated) => setCurrentUser(updated)}
+      />
+
       {/* Navigation Header */}
       <Navbar
         currentTab={currentTab}
         onNavigate={handleNavigate}
         isAdminLoggedIn={isAdminLoggedIn}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenProfileModal={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -149,6 +228,8 @@ export default function App() {
             barbers={barbers}
             initialServiceId={selectedServiceForBooking}
             initialBarberId={selectedBarberForBooking}
+            currentUser={currentUser}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
             showToast={showToast}
           />
         )}

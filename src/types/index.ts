@@ -67,3 +67,14 @@ export interface AdminStats {
   completedBookings: number;
   totalRevenue: number;
 }
+
+export interface UserProfile {
+  id: string;
+  phone: string;
+  name: string;
+  email?: string;
+  preferred_service?: string;
+  preferred_barber?: string;
+  created_at: string;
+  last_login_at?: string;
+}

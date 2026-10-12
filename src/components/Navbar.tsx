@@ -1,13 +1,24 @@
 import React, { useState } from 'react';
-import { Crown, Scissors, Menu, X, ShieldAlert, Calendar, PhoneCall } from 'lucide-react';
+import { Crown, Scissors, Menu, X, ShieldAlert, Calendar, PhoneCall, UserCheck, LogIn, User } from 'lucide-react';
+import { UserProfile } from '../types';
 
 interface NavbarProps {
   currentTab: string;
   onNavigate: (tab: string) => void;
   isAdminLoggedIn?: boolean;
+  currentUser?: UserProfile | null;
+  onOpenAuthModal?: () => void;
+  onOpenProfileModal?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentTab, onNavigate, isAdminLoggedIn }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  currentTab,
+  onNavigate,
+  isAdminLoggedIn,
+  currentUser,
+  onOpenAuthModal,
+  onOpenProfileModal,
+}) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
@@ -51,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onNavigate, isAdminL
           {/* Brand Logo */}
           <button
             onClick={() => handleLinkClick('home')}
-            className="flex items-center gap-3.5 group text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37] rounded-lg p-1"
+            className="flex items-center gap-3.5 group text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37] rounded-lg p-1 cursor-pointer"
           >
             <div className="relative w-11 h-11 rounded-lg bg-gradient-to-br from-[#24242a] to-[#141418] border border-[#d4af37]/40 flex items-center justify-center shadow-lg group-hover:border-[#d4af37] transition-colors">
               <Crown className="w-5 h-5 text-[#d4af37] absolute -top-1 right-1 opacity-80" />
@@ -75,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onNavigate, isAdminL
                 <button
                   key={link.id}
                   onClick={() => handleLinkClick(link.id)}
-                  className={`relative text-sm tracking-wide font-medium transition-colors py-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4af37] ${
+                  className={`relative text-sm tracking-wide font-medium transition-colors py-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4af37] cursor-pointer ${
                     isActive ? 'text-[#d4af37]' : 'text-zinc-300 hover:text-white'
                   }`}
                 >
@@ -89,10 +100,35 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onNavigate, isAdminL
           </nav>
 
           {/* Right Action Buttons */}
-          <div className="hidden sm:flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-3">
+            {/* Customer Login / Profile Button */}
+            {currentUser ? (
+              <button
+                onClick={onOpenProfileModal}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#1a1a22] border border-[#d4af37]/50 hover:border-[#d4af37] text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+                title="Open Your Profile & Bookings"
+              >
+                <div className="w-5 h-5 rounded-full bg-[#d4af37] text-[#0c0c0e] flex items-center justify-center text-[10px] font-black">
+                  {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <span className="max-w-[100px] truncate">{currentUser.name || 'Patron'}</span>
+                <span className="text-[10px] text-[#d4af37] uppercase font-bold">Profile</span>
+              </button>
+            ) : (
+              <button
+                onClick={onOpenAuthModal}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#15151a] border border-[#2b2b36] hover:border-[#d4af37] text-zinc-300 hover:text-white text-xs font-medium transition-all cursor-pointer"
+                title="Login with Mobile & Password"
+              >
+                <LogIn className="w-3.5 h-3.5 text-[#d4af37]" />
+                <span>लॉगिन / Login</span>
+              </button>
+            )}
+
+            {/* Admin Lounge Button */}
             <button
               onClick={() => handleLinkClick('admin')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
                 currentTab === 'admin'
                   ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]'
                   : 'border-zinc-800 bg-[#16161b] text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
@@ -100,20 +136,38 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onNavigate, isAdminL
               title="Enter Admin Portal"
             >
               <ShieldAlert className="w-3.5 h-3.5 text-[#d4af37]" />
-              <span>{isAdminLoggedIn ? 'Admin Panel' : 'Staff Portal'}</span>
+              <span>{isAdminLoggedIn ? 'Admin Panel' : 'Staff'}</span>
             </button>
 
+            {/* Book Chair Primary Button */}
             <button
               onClick={() => handleLinkClick('booking')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-[#d4af37] to-[#b89025] hover:from-[#e1be48] hover:to-[#c69d2f] text-[#0f0f12] font-semibold text-xs tracking-wider uppercase shadow-lg shadow-[#d4af37]/15 transition-all transform hover:-translate-y-0.5"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-[#d4af37] to-[#b89025] hover:from-[#e1be48] hover:to-[#c69d2f] text-[#0f0f12] font-semibold text-xs tracking-wider uppercase shadow-lg shadow-[#d4af37]/15 transition-all transform hover:-translate-y-0.5 cursor-pointer"
             >
               <Calendar className="w-3.5 h-3.5" />
-              <span>Book Appointment</span>
+              <span>Book Chair</span>
             </button>
           </div>
 
           {/* Mobile menu button */}
           <div className="flex sm:hidden items-center gap-2">
+            {currentUser ? (
+              <button
+                onClick={onOpenProfileModal}
+                className="p-1.5 rounded-lg bg-[#1a1a22] border border-[#d4af37]/50 text-[#d4af37] text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span className="text-[11px]">Profile</span>
+              </button>
+            ) : (
+              <button
+                onClick={onOpenAuthModal}
+                className="px-2.5 py-1 rounded-md bg-[#16161c] border border-zinc-700 text-zinc-300 text-xs font-semibold"
+              >
+                Login
+              </button>
+            )}
+
             <button
               onClick={() => handleLinkClick('booking')}
               className="px-3 py-1.5 rounded-md bg-[#d4af37] text-[#0f0f12] text-xs font-bold uppercase tracking-wider"
@@ -138,7 +192,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onNavigate, isAdminL
             <button
               key={link.id}
               onClick={() => handleLinkClick(link.id)}
-              className={`block w-full text-left px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+              className={`block w-full text-left px-3 py-2.5 rounded-md text-sm font-medium transition-colors cursor-pointer ${
                 currentTab === link.id
                   ? 'bg-[#d4af37]/10 text-[#d4af37] font-semibold'
                   : 'text-zinc-300 hover:bg-[#1a1a20] hover:text-white'
@@ -149,6 +203,30 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onNavigate, isAdminL
           ))}
 
           <div className="pt-2 border-t border-[#26262b] flex flex-col gap-2">
+            {currentUser ? (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onOpenProfileModal) onOpenProfileModal();
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#1a1a24] border border-[#d4af37]/40 text-white font-semibold text-xs"
+              >
+                <UserCheck className="w-4 h-4 text-[#d4af37]" />
+                <span>Mera Profile ({currentUser.name || currentUser.phone})</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onOpenAuthModal) onOpenAuthModal();
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#1a1a24] border border-zinc-700 text-zinc-200 text-xs font-medium"
+              >
+                <LogIn className="w-4 h-4 text-[#d4af37]" />
+                <span>मोबाइल और पासवर्ड से लॉगिन करें</span>
+              </button>
+            )}
+
             <button
               onClick={() => handleLinkClick('booking')}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gradient-to-r from-[#d4af37] to-[#b89025] text-[#0f0f12] font-bold text-xs uppercase tracking-wider"

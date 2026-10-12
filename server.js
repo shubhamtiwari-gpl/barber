@@ -74,6 +74,19 @@ function initTables(db) {
       created_at TEXT NOT NULL
     );
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      phone TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      name TEXT,
+      email TEXT,
+      preferred_service TEXT,
+      preferred_barber TEXT,
+      created_at TEXT NOT NULL,
+      last_login_at TEXT
+    );
+  `);
   const countResult = db.exec("SELECT COUNT(*) as count FROM appointments");
   const appointmentCount = countResult.length > 0 && countResult[0].values.length > 0 ? Number(countResult[0].values[0][0]) : 0;
   if (appointmentCount === 0) {
@@ -427,6 +440,57 @@ function requireAdmin(req, res, next) {
   req.adminUser = decoded;
   next();
 }
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.pbkdf2Sync(password, salt, 1e3, 64, "sha512").toString("hex");
+  return `${salt}:${hash}`;
+}
+function verifyPassword(password, storedHash) {
+  if (!password || !storedHash) return false;
+  const [salt, hash] = storedHash.split(":");
+  if (!salt || !hash) return false;
+  const verifyHash = crypto.pbkdf2Sync(password, salt, 1e3, 64, "sha512").toString("hex");
+  return hash === verifyHash;
+}
+function generateUserToken(userId, phone) {
+  const payload = {
+    userId,
+    phone,
+    role: "customer",
+    exp: Date.now() + 1e3 * 60 * 60 * 24 * 30
+    // 30 days
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", ADMIN_SECRET).update(payloadB64).digest("base64url");
+  return `${payloadB64}.${signature}`;
+}
+function verifyUserToken(token) {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, signature] = parts;
+  const expectedSignature = crypto.createHmac("sha256", ADMIN_SECRET).update(payloadB64).digest("base64url");
+  if (signature !== expectedSignature) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
+    if (payload.exp && Date.now() > payload.exp) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+function requireUserAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : req.headers["x-user-token"];
+  const decoded = verifyUserToken(token);
+  if (!decoded) {
+    return res.status(401).json({ error: "Unauthorized: \u0915\u0943\u092A\u092F\u093E \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902 / Please login to access profile." });
+  }
+  req.user = decoded;
+  next();
+}
 
 // server.ts
 var __filename2 = fileURLToPath2(import.meta.url);
@@ -553,6 +617,183 @@ async function startServer() {
     } catch (error) {
       console.error("Error saving contact message:", error);
       res.status(500).json({ error: "Failed to send message. Please try again." });
+    }
+  });
+  function normalizePhone(p) {
+    return p.replace(/[\s\-\(\)]/g, "").trim();
+  }
+  app.post("/api/user/auth", (req, res) => {
+    try {
+      const { phone, password, name } = req.body;
+      if (!phone || !password) {
+        return res.status(400).json({
+          error: "Mobile number aur password dono zaroori hain / Mobile number and password are required."
+        });
+      }
+      const cleanPhone = normalizePhone(String(phone));
+      if (cleanPhone.length < 5) {
+        return res.status(400).json({ error: "Please enter a valid mobile number." });
+      }
+      const stmt = db.prepare("SELECT * FROM users WHERE phone = ?");
+      stmt.bind([cleanPhone]);
+      let user = null;
+      if (stmt.step()) {
+        user = stmt.getAsObject();
+      }
+      stmt.free();
+      if (!user) {
+        const userId = `usr-${Date.now()}-${Math.floor(Math.random() * 1e3)}`;
+        const passHash = hashPassword(String(password));
+        const userName = name && String(name).trim() || "Valued Patron";
+        const createdAt = (/* @__PURE__ */ new Date()).toISOString();
+        db.run(
+          `INSERT INTO users (id, phone, password_hash, name, email, preferred_service, preferred_barber, created_at, last_login_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [userId, cleanPhone, passHash, userName, "", "", "", createdAt, createdAt]
+        );
+        saveDatabase();
+        const token2 = generateUserToken(userId, cleanPhone);
+        return res.status(201).json({
+          success: true,
+          isNewUser: true,
+          message: "\u0916\u093E\u0924\u093E \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092C\u0928 \u0917\u092F\u093E \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0939\u094B \u0917\u092F\u093E! / Account created & logged in successfully!",
+          token: token2,
+          user: {
+            id: userId,
+            phone: cleanPhone,
+            name: userName,
+            email: "",
+            preferred_service: "",
+            preferred_barber: "",
+            created_at: createdAt
+          }
+        });
+      }
+      const isPasswordCorrect = verifyPassword(String(password), user.password_hash);
+      if (!isPasswordCorrect) {
+        return res.status(401).json({
+          error: "\u0917\u0932\u0924 \u092A\u093E\u0938\u0935\u0930\u094D\u0921! \u0915\u0943\u092A\u092F\u093E \u0938\u0939\u0940 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0921\u093E\u0932\u0947\u0902 / Incorrect password. Please try again."
+        });
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      db.run("UPDATE users SET last_login_at = ? WHERE id = ?", [now, user.id]);
+      saveDatabase();
+      const token = generateUserToken(user.id, user.phone);
+      return res.json({
+        success: true,
+        isNewUser: false,
+        message: "\u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0932\u0949\u0917\u093F\u0928 \u0939\u094B \u0917\u092F\u093E / Login successful!",
+        token,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          name: user.name,
+          email: user.email,
+          preferred_service: user.preferred_service,
+          preferred_barber: user.preferred_barber,
+          created_at: user.created_at
+        }
+      });
+    } catch (error) {
+      console.error("Error during customer auth:", error);
+      res.status(500).json({ error: "Authentication failed. Please try again." });
+    }
+  });
+  app.get("/api/user/profile", requireUserAuth, (req, res) => {
+    try {
+      const authUser = req.user;
+      const stmt = db.prepare(
+        "SELECT id, phone, name, email, preferred_service, preferred_barber, created_at, last_login_at FROM users WHERE id = ?"
+      );
+      stmt.bind([authUser.userId]);
+      let profile = null;
+      if (stmt.step()) {
+        profile = stmt.getAsObject();
+      }
+      stmt.free();
+      if (!profile) {
+        return res.status(404).json({ error: "User profile not found." });
+      }
+      const aptStmt = db.prepare(
+        "SELECT * FROM appointments WHERE phone = ? OR phone LIKE ? ORDER BY date DESC, time DESC"
+      );
+      aptStmt.bind([profile.phone, `%${profile.phone.slice(-8)}%`]);
+      const userAppointments = [];
+      while (aptStmt.step()) {
+        userAppointments.push(aptStmt.getAsObject());
+      }
+      aptStmt.free();
+      res.json({
+        user: profile,
+        appointments: userAppointments
+      });
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ error: "Failed to fetch user profile" });
+    }
+  });
+  app.patch("/api/user/profile", requireUserAuth, (req, res) => {
+    try {
+      const authUser = req.user;
+      const { name, email, preferred_service, preferred_barber } = req.body;
+      db.run(
+        `UPDATE users SET
+          name = COALESCE(?, name),
+          email = COALESCE(?, email),
+          preferred_service = COALESCE(?, preferred_service),
+          preferred_barber = COALESCE(?, preferred_barber)
+        WHERE id = ?`,
+        [
+          name !== void 0 ? String(name).trim() : null,
+          email !== void 0 ? String(email).trim() : null,
+          preferred_service !== void 0 ? String(preferred_service).trim() : null,
+          preferred_barber !== void 0 ? String(preferred_barber).trim() : null,
+          authUser.userId
+        ]
+      );
+      saveDatabase();
+      const stmt = db.prepare(
+        "SELECT id, phone, name, email, preferred_service, preferred_barber, created_at FROM users WHERE id = ?"
+      );
+      stmt.bind([authUser.userId]);
+      stmt.step();
+      const updatedUser = stmt.getAsObject();
+      stmt.free();
+      res.json({
+        success: true,
+        message: "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u092A\u0921\u0947\u091F \u0939\u094B \u0917\u0908 / Profile updated successfully.",
+        user: updatedUser
+      });
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+  app.patch("/api/user/appointments/:id/cancel", requireUserAuth, (req, res) => {
+    try {
+      const authUser = req.user;
+      const { id } = req.params;
+      const aptStmt = db.prepare("SELECT * FROM appointments WHERE id = ?");
+      aptStmt.bind([id]);
+      let apt = null;
+      if (aptStmt.step()) {
+        apt = aptStmt.getAsObject();
+      }
+      aptStmt.free();
+      if (!apt) {
+        return res.status(404).json({ error: "Appointment not found." });
+      }
+      const cleanUserPhone = normalizePhone(authUser.phone);
+      const cleanAptPhone = normalizePhone(apt.phone);
+      if (!cleanAptPhone.includes(cleanUserPhone.slice(-8))) {
+        return res.status(403).json({ error: "Unauthorized to cancel this appointment." });
+      }
+      db.run("UPDATE appointments SET status = ? WHERE id = ?", ["cancelled", id]);
+      saveDatabase();
+      res.json({ success: true, message: "Appointment cancelled successfully." });
+    } catch (error) {
+      console.error("Error cancelling appointment:", error);
+      res.status(500).json({ error: "Failed to cancel appointment." });
     }
   });
   app.post("/api/admin/login", (req, res) => {
